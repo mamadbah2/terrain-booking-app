@@ -6,9 +6,9 @@ import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Calendar, Clock, CheckCircle, AlertCircle } from "lucide-react"
+import { useAuth } from "@/contexts/AuthContext"
 
 interface Field {
   id: string
@@ -18,11 +18,13 @@ interface Field {
 }
 
 export default function ManualReservation() {
-  const [fields, setFields] = useState<Field[]>([])
-  const [selectedField, setSelectedField] = useState("")
+  const { user } = useAuth()
+  const [field, setField] = useState<Field | null>(null)
+  const [loading, setLoading] = useState(true)
   const [selectedDate, setSelectedDate] = useState("")
   const [selectedSlot, setSelectedSlot] = useState("")
   const [availableSlots, setAvailableSlots] = useState<Array<{ time: string; available: boolean }>>([])
+  const [availabilityLoading, setAvailabilityLoading] = useState(false)
   const [customerInfo, setCustomerInfo] = useState({
     firstName: "",
     lastName: "",
@@ -33,64 +35,98 @@ export default function ManualReservation() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [submitStatus, setSubmitStatus] = useState<"idle" | "success" | "error">("idle")
   const [reservationCode, setReservationCode] = useState("")
+  const [error, setError] = useState<string | null>(null)
 
-  // Mock fields data
-  const mockFields: Field[] = [
-    { id: "1", name: "TERRAIN PLACE DE L'OBELISQUE", location: "Fass, Dakar", price: 30000 },
-    { id: "2", name: "COURT DE TENNIS ALMADIES", location: "Almadies, Dakar", price: 25000 },
-  ]
-
+  // Récupérer le terrain géré par le gérant connecté
   useEffect(() => {
-    setFields(mockFields)
-  }, [])
+    const fetchManagedField = async () => {
+      if (!user?.id) return
 
+      setLoading(true)
+      setError(null)
+      
+      try {
+        const response = await fetch(`/api/terrains/gerant/${user.id}`, {
+          method: "GET",
+          credentials: "include",
+        })
+
+        const data = await response.json()
+
+        if (response.ok && data.success && data.terrain) {
+          setField({
+            id: data.terrain.id,
+            name: data.terrain.name,
+            location: data.terrain.location,
+            price: data.terrain.price
+          })
+        } else {
+          setError("Aucun terrain assigné à ce gérant")
+        }
+      } catch (error) {
+        console.error("Error fetching managed field:", error)
+        setError("Erreur de connexion")
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchManagedField()
+  }, [user?.id])
+
+  // Récupérer les disponibilités réelles depuis l'API
   const fetchAvailability = async (fieldId: string, date: string) => {
     if (!fieldId || !date) return
 
+    setAvailabilityLoading(true)
     try {
-      // Mock availability data
-      const mockSlots = [
-        { time: "08:00", available: true },
-        { time: "10:00", available: Math.random() > 0.3 },
-        { time: "12:00", available: false },
-        { time: "14:00", available: Math.random() > 0.2 },
-        { time: "16:00", available: Math.random() > 0.4 },
-        { time: "18:00", available: false },
-        { time: "20:00", available: Math.random() > 0.5 },
-      ]
-      setAvailableSlots(mockSlots)
+      const response = await fetch(`/api/terrains/${fieldId}/disponibilites?date=${date}`)
+      if (response.ok) {
+        const data = await response.json()
+        if (data.availableSlots && data.availableSlots.length > 0) {
+          setAvailableSlots(data.availableSlots)
+        } else {
+          setAvailableSlots([])
+        }
+      } else {
+        setAvailableSlots([])
+      }
     } catch (error) {
       console.error("Error fetching availability:", error)
+      setAvailableSlots([])
+    } finally {
+      setAvailabilityLoading(false)
     }
   }
 
   useEffect(() => {
-    if (selectedField && selectedDate) {
-      fetchAvailability(selectedField, selectedDate)
+    if (field?.id && selectedDate) {
+      fetchAvailability(field.id, selectedDate)
       setSelectedSlot("")
     }
-  }, [selectedField, selectedDate])
+  }, [field?.id, selectedDate])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    if (!selectedField || !selectedDate || !selectedSlot || !customerInfo.firstName || !customerInfo.lastName) {
-      alert("Veuillez remplir tous les champs obligatoires")
+    if (!field || !selectedDate || !selectedSlot || !customerInfo.firstName || !customerInfo.lastName) {
+      setError("Veuillez remplir tous les champs obligatoires")
       return
     }
 
     if (customerInfo.contactMethod === "phone" && !customerInfo.phone) {
-      alert("Veuillez entrer un numéro de téléphone")
+      setError("Veuillez entrer un numéro de téléphone")
       return
     }
 
     if (customerInfo.contactMethod === "email" && !customerInfo.email) {
-      alert("Veuillez entrer une adresse email")
+      setError("Veuillez entrer une adresse email")
       return
     }
 
     setIsSubmitting(true)
     setSubmitStatus("idle")
+    setError(null)
 
     try {
       const response = await fetch("/api/reservations/manual", {
@@ -98,8 +134,9 @@ export default function ManualReservation() {
         headers: {
           "Content-Type": "application/json",
         },
+        credentials: "include",
         body: JSON.stringify({
-          terrainId: selectedField,
+          terrainId: field.id,
           date: selectedDate,
           timeSlot: selectedSlot,
           firstName: customerInfo.firstName,
@@ -107,37 +144,75 @@ export default function ManualReservation() {
           contactMethod: customerInfo.contactMethod,
           phone: customerInfo.phone,
           email: customerInfo.email,
+          totalPrice: field.price,
           manualBooking: true,
         }),
       })
 
-      if (!response.ok) {
-        throw new Error("Erreur lors de la réservation")
+      const data = await response.json()
+
+      if (response.ok && data.success) {
+        setReservationCode(data.reservationCode)
+        setSubmitStatus("success")
+
+        // Reset form
+        setSelectedDate("")
+        setSelectedSlot("")
+        setCustomerInfo({
+          firstName: "",
+          lastName: "",
+          contactMethod: "phone",
+          phone: "",
+          email: "",
+        })
+        
+        // Rafraîchir les disponibilités
+        if (field.id && selectedDate) {
+          fetchAvailability(field.id, selectedDate)
+        }
+      } else {
+        setError(data.error || "Erreur lors de la réservation")
+        setSubmitStatus("error")
       }
-
-      const result = await response.json()
-      setReservationCode(result.reservationCode)
-      setSubmitStatus("success")
-
-      // Reset form
-      setSelectedField("")
-      setSelectedDate("")
-      setSelectedSlot("")
-      setCustomerInfo({
-        firstName: "",
-        lastName: "",
-        contactMethod: "phone",
-        phone: "",
-        email: "",
-      })
     } catch (error) {
+      console.error("Error creating manual reservation:", error)
+      setError("Erreur de connexion")
       setSubmitStatus("error")
     } finally {
       setIsSubmitting(false)
     }
   }
 
-  const selectedFieldData = fields.find((field) => field.id === selectedField)
+  if (loading) {
+    return (
+      <div className="max-w-2xl mx-auto space-y-6">
+        <Card>
+          <CardContent className="p-6">
+            <div className="animate-pulse">
+              <div className="h-4 bg-gray-200 rounded w-1/4 mb-2"></div>
+              <div className="h-3 bg-gray-200 rounded w-1/2 mb-4"></div>
+              <div className="h-32 bg-gray-200 rounded"></div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
+
+  if (error && !field) {
+    return (
+      <div className="max-w-2xl mx-auto text-center py-12">
+        <div className="text-red-600 mb-4">
+          <AlertCircle className="w-16 h-16 mx-auto mb-4" />
+          <p className="text-lg font-semibold">Aucun terrain assigné</p>
+          <p>{error}</p>
+        </div>
+        <p className="text-gray-600">
+          Vous devez avoir un terrain assigné pour créer des réservations manuelles.
+        </p>
+      </div>
+    )
+  }
 
   return (
     <div className="max-w-2xl mx-auto space-y-6">
@@ -157,14 +232,14 @@ export default function ManualReservation() {
         </Card>
       )}
 
-      {submitStatus === "error" && (
+      {error && submitStatus === "error" && (
         <Card className="border-red-200 bg-red-50">
           <CardContent className="p-6">
             <div className="flex items-center">
               <AlertCircle className="w-6 h-6 text-red-600 mr-3" />
               <div>
                 <h3 className="font-semibold text-red-800">Erreur lors de la réservation</h3>
-                <p className="text-red-700">Veuillez réessayer ou contacter le support technique.</p>
+                <p className="text-red-700">{error}</p>
               </div>
             </div>
           </CardContent>
@@ -174,26 +249,14 @@ export default function ManualReservation() {
       <Card>
         <CardHeader>
           <CardTitle>Créer une réservation manuelle</CardTitle>
+          {field && (
+            <p className="text-sm text-gray-600">
+              Terrain: <span className="font-medium">{field.name}</span> - {field.location}
+            </p>
+          )}
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-6">
-            {/* Field Selection */}
-            <div>
-              <Label htmlFor="field">Terrain *</Label>
-              <Select value={selectedField} onValueChange={setSelectedField}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Sélectionner un terrain" />
-                </SelectTrigger>
-                <SelectContent>
-                  {fields.map((field) => (
-                    <SelectItem key={field.id} value={field.id}>
-                      {field.name} - {field.location}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
             {/* Date Selection */}
             <div>
               <Label htmlFor="date" className="flex items-center">
@@ -210,31 +273,40 @@ export default function ManualReservation() {
             </div>
 
             {/* Time Slots */}
-            {availableSlots.length > 0 && (
+            {selectedDate && (
               <div>
                 <Label className="flex items-center mb-3">
                   <Clock className="w-4 h-4 mr-2" />
                   Créneaux disponibles *
                 </Label>
-                <div className="grid grid-cols-3 gap-2">
-                  {availableSlots.map((slot) => (
-                    <button
-                      key={slot.time}
-                      type="button"
-                      onClick={() => slot.available && setSelectedSlot(slot.time)}
-                      disabled={!slot.available}
-                      className={`p-2 rounded-md text-sm font-medium transition-colors ${
-                        selectedSlot === slot.time
-                          ? "bg-green-600 text-white"
-                          : slot.available
-                            ? "bg-green-100 text-green-800 hover:bg-green-200"
-                            : "bg-gray-100 text-gray-400 cursor-not-allowed"
-                      }`}
-                    >
-                      {slot.time}
-                    </button>
-                  ))}
-                </div>
+                {availabilityLoading ? (
+                  <div className="text-center py-4">
+                    <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-green-600 mx-auto"></div>
+                    <p className="text-sm text-gray-500 mt-2">Vérification des disponibilités...</p>
+                  </div>
+                ) : availableSlots.length > 0 ? (
+                  <div className="grid grid-cols-3 gap-2">
+                    {availableSlots.map((slot) => (
+                      <button
+                        key={slot.time}
+                        type="button"
+                        onClick={() => slot.available && setSelectedSlot(slot.time)}
+                        disabled={!slot.available}
+                        className={`p-2 rounded-md text-sm font-medium transition-colors ${
+                          selectedSlot === slot.time
+                            ? "bg-green-600 text-white"
+                            : slot.available
+                              ? "bg-green-100 text-green-800 hover:bg-green-200"
+                              : "bg-gray-100 text-gray-400 cursor-not-allowed"
+                        }`}
+                      >
+                        {slot.time}
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-gray-500 text-center py-4">Aucun créneau disponible pour cette date</p>
+                )}
               </div>
             )}
 
@@ -317,15 +389,15 @@ export default function ManualReservation() {
             </div>
 
             {/* Price Summary */}
-            {selectedFieldData && selectedSlot && (
+            {field && selectedSlot && (
               <div className="bg-gray-50 p-4 rounded-lg">
                 <h4 className="font-medium text-gray-900 mb-2">Résumé de la réservation</h4>
                 <div className="space-y-1 text-sm text-gray-600">
-                  <p>Terrain: {selectedFieldData.name}</p>
+                  <p>Terrain: {field.name}</p>
                   <p>Date: {new Date(selectedDate).toLocaleDateString("fr-FR")}</p>
                   <p>Heure: {selectedSlot} (1 heure)</p>
                   <div className="border-t pt-2 mt-2">
-                    <p className="font-medium text-gray-900">Total: {selectedFieldData.price.toLocaleString()} FCFA</p>
+                    <p className="font-medium text-gray-900">Total: {field.price.toLocaleString()} FCFA</p>
                   </div>
                 </div>
               </div>
@@ -333,7 +405,7 @@ export default function ManualReservation() {
 
             <Button
               type="submit"
-              disabled={isSubmitting || !selectedField || !selectedDate || !selectedSlot}
+              disabled={isSubmitting || !field || !selectedDate || !selectedSlot}
               className="w-full bg-green-600 hover:bg-green-700"
             >
               {isSubmitting ? "Création..." : "Créer la réservation"}

@@ -1,3 +1,5 @@
+import clientPromise from "@/lib/mongodb"
+import { ObjectId } from "mongodb"
 import { type NextRequest, NextResponse } from "next/server"
 
 export async function POST(request: NextRequest) {
@@ -20,6 +22,30 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "L'adresse email est requise" }, { status: 400 })
     }
 
+    // Connecter à MongoDB
+    const client = await clientPromise
+    const db = client.db("terrainBooking")
+
+    // Vérifier que le terrain existe
+    const terrain = await db.collection("terrains").findOne({
+      _id: new ObjectId(body.terrainId)
+    })
+
+    if (!terrain) {
+      return NextResponse.json({ error: "Terrain introuvable" }, { status: 404 })
+    }
+
+    // Vérifier la disponibilité du créneau
+    const existingReservation = await db.collection("reservations").findOne({
+      fieldId: new ObjectId(body.terrainId),
+      date: body.date,
+      startTime: body.timeSlot
+    })
+
+    if (existingReservation) {
+      return NextResponse.json({ error: "Ce créneau n'est plus disponible" }, { status: 409 })
+    }
+
     // Generate unique reservation code
     const generateCode = (): string => {
       const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
@@ -30,29 +56,53 @@ export async function POST(request: NextRequest) {
       return result
     }
 
-    const reservationCode = generateCode()
+    const reservationCode = `TB-${body.date.replace(/-/g, '')}-${generateCode()}`
 
-    // Simulate API processing delay
-    await new Promise((resolve) => setTimeout(resolve, 1000))
+    // Calculer l'heure de fin (durée par défaut: 1 heure)
+    const startTime = body.timeSlot
+    const [hours, minutes] = startTime.split(':').map(Number)
+    const duration = body.duration || 60 // durée en minutes
+    const endHours = Math.floor((hours * 60 + minutes + duration) / 60)
+    const endMinutes = (hours * 60 + minutes + duration) % 60
+    const endTime = `${endHours.toString().padStart(2, '0')}:${endMinutes.toString().padStart(2, '0')}`
 
-    // In a real application, you would:
-    // 1. Validate the terrain availability
-    // 2. Create the reservation in the database
-    // 3. Mark it as a manual booking by staff
-    // 4. Send confirmation to customer
-
+    // Créer la réservation manuelle avec statut "confirmé" directement
     const reservation = {
-      id: `manual_${Date.now()}`,
-      code: reservationCode,
-      ...body,
-      status: "Confirmé",
-      manualBooking: true,
-      createdAt: new Date().toISOString(),
+      fieldId: new ObjectId(body.terrainId),
+      date: body.date,
+      startTime: startTime,
+      endTime: endTime,
+      durationMinutes: duration,
+      totalPrice: body.totalPrice || terrain.pricePerHour,
+      status: "confirmed", // Réservation manuelle confirmée directement
+      reservationCode: reservationCode,
+      guestName: `${body.firstName} ${body.lastName}`,
+      guestPhoneNumber: body.contactMethod === "phone" ? body.phone : null,
+      guestEmail: body.contactMethod === "email" ? body.email : null,
+      bookedAt: new Date().toISOString(),
+      paymentId: null,
+      manualBooking: true, // Marquer comme réservation manuelle
     }
+
+    // Insérer en base de données
+    const result = await db.collection("reservations").insertOne(reservation)
+
+    if (!result.insertedId) {
+      return NextResponse.json({ error: "Erreur lors de la création de la réservation" }, { status: 500 })
+    }
+
+    console.log(`Réservation manuelle créée: ${reservationCode}`)
 
     return NextResponse.json({
       success: true,
-      reservation,
+      reservation: {
+        id: result.insertedId.toString(),
+        code: reservationCode,
+        ...body,
+        status: "confirmed",
+        createdAt: new Date().toISOString(),
+        manualBooking: true,
+      },
       reservationCode,
       message: "Réservation manuelle créée avec succès",
     })

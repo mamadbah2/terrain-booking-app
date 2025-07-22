@@ -122,9 +122,9 @@ export default function FindReservationPage() {
                 type="text"
                 value={searchCode}
                 onChange={(e) => setSearchCode(e.target.value.toUpperCase())}
-                placeholder="Ex: ABC123"
+                placeholder="Ex: TB-20250722-8OJ7H8"
                 className="text-center text-lg font-mono tracking-wider"
-                maxLength={6}
+                maxLength={20}
               />
             </div>
 

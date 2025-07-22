@@ -15,32 +15,50 @@ interface DashboardStats {
   fieldsChange: number
   averageBookingValue: number
   bookingValueChange: number
+  revenueChartData?: Array<{
+    date: string
+    revenue: number
+    reservations: number
+  }>
+  popularFields?: Array<{
+    id: string
+    name: string
+    location: string
+    reservations: number
+    revenue: number
+  }>
 }
 
 export default function DashboardOverview() {
   const [stats, setStats] = useState<DashboardStats | null>(null)
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     const fetchStats = async () => {
       setLoading(true)
+      setError(null)
+      
       try {
-        // Simulate API call
-        await new Promise((resolve) => setTimeout(resolve, 1000))
-
-        // Mock data
-        setStats({
-          totalRevenue: 2450000,
-          revenueChange: 12.5,
-          totalReservations: 156,
-          reservationsChange: 8.2,
-          activeFields: 12,
-          fieldsChange: 0,
-          averageBookingValue: 28500,
-          bookingValueChange: -2.1,
+        const response = await fetch('/api/dashboard/stats', {
+          method: 'GET',
+          credentials: 'include',
         })
+
+        if (!response.ok) {
+          throw new Error('Erreur lors de la récupération des statistiques')
+        }
+
+        const data = await response.json()
+        
+        if (data.success) {
+          setStats(data.stats)
+        } else {
+          throw new Error(data.error || 'Erreur inconnue')
+        }
       } catch (error) {
         console.error("Error fetching dashboard stats:", error)
+        setError(error instanceof Error ? error.message : 'Erreur de connexion')
       } finally {
         setLoading(false)
       }

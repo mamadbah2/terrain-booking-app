@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart"
-import { Bar, BarChart, Line, LineChart, XAxis, YAxis, CartesianGrid, ResponsiveContainer } from "recharts"
+import { Line, LineChart, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart } from "recharts"
 import { Eye, TrendingUp } from "lucide-react"
 import {
   Dialog,
@@ -17,7 +17,7 @@ import {
 } from "@/components/ui/dialog"
 
 interface RevenueData {
-  period: string
+  date: string
   revenue: number
   reservations: number
 }
@@ -37,47 +37,17 @@ export default function RevenueChart({ compact = false }: RevenueChartProps) {
     const fetchRevenueData = async () => {
       setLoading(true)
       try {
-        // Simulate API call
-        await new Promise((resolve) => setTimeout(resolve, 800))
+        const response = await fetch('/api/dashboard/stats', {
+          method: 'GET',
+          credentials: 'include',
+        })
 
-        // Mock data based on period
-        let mockData: RevenueData[] = []
-
-        if (period === "daily") {
-          mockData = [
-            { period: "Lun", revenue: 85000, reservations: 3 },
-            { period: "Mar", revenue: 120000, reservations: 4 },
-            { period: "Mer", revenue: 95000, reservations: 3 },
-            { period: "Jeu", revenue: 140000, reservations: 5 },
-            { period: "Ven", revenue: 180000, reservations: 6 },
-            { period: "Sam", revenue: 220000, reservations: 8 },
-            { period: "Dim", revenue: 160000, reservations: 5 },
-          ]
-        } else if (period === "weekly") {
-          mockData = [
-            { period: "S1", revenue: 680000, reservations: 24 },
-            { period: "S2", revenue: 720000, reservations: 26 },
-            { period: "S3", revenue: 650000, reservations: 22 },
-            { period: "S4", revenue: 780000, reservations: 28 },
-          ]
-        } else {
-          mockData = [
-            { period: "Jan", revenue: 1200000, reservations: 45 },
-            { period: "Fév", revenue: 1350000, reservations: 52 },
-            { period: "Mar", revenue: 1180000, reservations: 43 },
-            { period: "Avr", revenue: 1420000, reservations: 58 },
-            { period: "Mai", revenue: 1680000, reservations: 65 },
-            { period: "Jun", revenue: 1850000, reservations: 72 },
-            { period: "Jul", revenue: 2100000, reservations: 81 },
-            { period: "Aoû", revenue: 1950000, reservations: 76 },
-            { period: "Sep", revenue: 1720000, reservations: 68 },
-            { period: "Oct", revenue: 1580000, reservations: 62 },
-            { period: "Nov", revenue: 1450000, reservations: 56 },
-            { period: "Déc", revenue: 1380000, reservations: 54 },
-          ]
+        if (response.ok) {
+          const result = await response.json()
+          if (result.success && result.stats.revenueChartData) {
+            setData(result.stats.revenueChartData)
+          }
         }
-
-        setData(mockData)
       } catch (error) {
         console.error("Error fetching revenue data:", error)
       } finally {
@@ -86,7 +56,7 @@ export default function RevenueChart({ compact = false }: RevenueChartProps) {
     }
 
     fetchRevenueData()
-  }, [period])
+  }, [])
 
   if (loading) {
     return (
@@ -116,8 +86,8 @@ export default function RevenueChart({ compact = false }: RevenueChartProps) {
     },
   }
 
-  const ChartComponent = chartType === "bar" ? BarChart : LineChart
-  const DataComponent = chartType === "bar" ? Bar : Line
+  const ChartComponent = chartType === "bar" ? LineChart : Line
+  const DataComponent = chartType === "bar" ? BarChart : Line
 
   const DetailModal = () => (
     <Dialog>
@@ -200,8 +170,8 @@ export default function RevenueChart({ compact = false }: RevenueChartProps) {
                     const growth = prevRevenue > 0 ? Math.round(((item.revenue - prevRevenue) / prevRevenue) * 100) : 0
 
                     return (
-                      <tr key={item.period} className="hover:bg-gray-50">
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{item.period}</td>
+                      <tr key={item.date} className="hover:bg-gray-50">
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{item.date}</td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                           {item.revenue.toLocaleString()} FCFA
                         </td>
@@ -237,12 +207,12 @@ export default function RevenueChart({ compact = false }: RevenueChartProps) {
                   .sort((a, b) => b.revenue - a.revenue)
                   .slice(0, 3)
                   .map((item, index) => (
-                    <div key={item.period} className="flex items-center justify-between p-2 bg-green-50 rounded">
+                    <div key={item.date} className="flex items-center justify-between p-2 bg-green-50 rounded">
                       <div className="flex items-center">
                         <span className="w-6 h-6 bg-green-600 text-white text-xs font-bold rounded-full flex items-center justify-center mr-2">
                           {index + 1}
                         </span>
-                        <span className="font-medium">{item.period}</span>
+                        <span className="font-medium">{item.date}</span>
                       </div>
                       <span className="text-green-600 font-semibold">{item.revenue.toLocaleString()} FCFA</span>
                     </div>
@@ -257,12 +227,12 @@ export default function RevenueChart({ compact = false }: RevenueChartProps) {
                   .sort((a, b) => b.reservations - a.reservations)
                   .slice(0, 3)
                   .map((item, index) => (
-                    <div key={item.period} className="flex items-center justify-between p-2 bg-blue-50 rounded">
+                    <div key={item.date} className="flex items-center justify-between p-2 bg-blue-50 rounded">
                       <div className="flex items-center">
                         <span className="w-6 h-6 bg-blue-600 text-white text-xs font-bold rounded-full flex items-center justify-center mr-2">
                           {index + 1}
                         </span>
-                        <span className="font-medium">{item.period}</span>
+                        <span className="font-medium">{item.date}</span>
                       </div>
                       <span className="text-blue-600 font-semibold">{item.reservations} réservations</span>
                     </div>
@@ -310,8 +280,20 @@ export default function RevenueChart({ compact = false }: RevenueChartProps) {
         <ResponsiveContainer width="100%" height="100%">
           <ChartComponent data={data} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
             <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey="period" />
-            <YAxis />
+            <XAxis
+              dataKey="date"
+              tick={{ fontSize: 12 }}
+              tickFormatter={(value) =>
+                new Date(value).toLocaleDateString("fr-FR", {
+                  month: "short",
+                  day: "numeric",
+                })
+              }
+            />
+            <YAxis
+              tick={{ fontSize: 12 }}
+              tickFormatter={(value) => `${value.toLocaleString()}`}
+            />
             <ChartTooltip
               content={<ChartTooltipContent />}
               formatter={(value, name) => [
