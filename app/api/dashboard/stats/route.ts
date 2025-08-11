@@ -141,6 +141,61 @@ export async function GET(request: NextRequest) {
         })
     )
 
+    // 9. Calculer les statistiques détaillées des réservations
+    const allReservations = await db.collection("reservations").find({
+      fieldId: { $in: terrainIds }
+    }).toArray()
+
+    const confirmedReservations = currentMonthReservations.filter(res => res.status === "confirmed")
+    const pendingReservations = currentMonthReservations.filter(res => res.status === "pending")
+    const cancelledReservations = currentMonthReservations.filter(res => res.status === "cancelled")
+    const completedReservations = currentMonthReservations.filter(res => res.status === "completed")
+
+    // Réservations à venir (futures)
+    const today = new Date()
+    const upcomingReservations = await db.collection("reservations").find({
+      fieldId: { $in: terrainIds },
+      date: { $gte: today.toISOString().split('T')[0] },
+      status: { $in: ["confirmed", "paid"] }
+    }).toArray()
+
+    // Réservations d'aujourd'hui
+    const todayString = today.toISOString().split('T')[0]
+    const todayReservations = await db.collection("reservations").find({
+      fieldId: { $in: terrainIds },
+      date: todayString,
+      status: { $in: ["confirmed", "paid"] }
+    }).toArray()
+
+    // 10. Données de tendance pour la semaine (7 derniers jours)
+    const weeklyTrends = []
+    const dayNames = ['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam']
+    
+    for (let i = 6; i >= 0; i--) {
+      const date = new Date()
+      date.setDate(date.getDate() - i)
+      const dayStart = new Date(date.getFullYear(), date.getMonth(), date.getDate())
+      const dayEnd = new Date(dayStart)
+      dayEnd.setDate(dayEnd.getDate() + 1)
+
+      const dayReservations = await db.collection("reservations").find({
+        fieldId: { $in: terrainIds },
+        bookedAt: { 
+          $gte: dayStart.toISOString(),
+          $lt: dayEnd.toISOString()
+        },
+        status: { $in: ["confirmed", "paid", "completed"] }
+      }).toArray()
+
+      const dayRevenue = dayReservations.reduce((sum, res) => sum + res.totalPrice, 0)
+      
+      weeklyTrends.push({
+        date: dayNames[date.getDay()],
+        reservations: dayReservations.length,
+        revenue: dayRevenue
+      })
+    }
+
     const stats = {
       totalRevenue: Math.round(totalRevenue),
       revenueChange: Math.round(revenueChange * 100) / 100,
@@ -151,7 +206,17 @@ export async function GET(request: NextRequest) {
       averageBookingValue: Math.round(averageBookingValue),
       bookingValueChange: Math.round(bookingValueChange * 100) / 100,
       revenueChartData,
-      popularFields
+      popularFields,
+      // Nouvelles statistiques de réservations
+      reservationStats: {
+        pending: pendingReservations.length,
+        confirmed: confirmedReservations.length,
+        paid: allReservations.filter(res => res.status === "paid").length,
+        completed: completedReservations.length,
+        cancelled: cancelledReservations.length,
+        todayReservations: todayReservations.length,
+      },
+      weeklyTrends
     }
 
     return NextResponse.json({

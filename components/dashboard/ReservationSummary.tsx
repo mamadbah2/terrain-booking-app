@@ -8,14 +8,12 @@ import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/
 import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid } from "recharts"
 
 interface ReservationStats {
-  total: number
-  confirmed: number
   pending: number
-  cancelled: number
+  confirmed: number
+  paid: number
   completed: number
-  upcoming: number
+  cancelled: number
   todayReservations: number
-  weeklyTrend: number
 }
 
 interface ReservationTrend {
@@ -34,33 +32,18 @@ export default function ReservationSummary() {
     const fetchReservationData = async () => {
       setLoading(true)
       try {
-        // Simulate API call
-        await new Promise((resolve) => setTimeout(resolve, 1000))
-
-        // Mock stats data
-        setStats({
-          total: 234,
-          confirmed: 189,
-          pending: 23,
-          cancelled: 12,
-          completed: 156,
-          upcoming: 33,
-          todayReservations: 8,
-          weeklyTrend: 15.3,
+        const response = await fetch('/api/dashboard/stats', {
+          method: 'GET',
+          credentials: 'include',
         })
 
-        // Mock trend data
-        const mockTrends: ReservationTrend[] = [
-          { date: "Lun", reservations: 12, revenue: 360000 },
-          { date: "Mar", reservations: 15, revenue: 450000 },
-          { date: "Mer", reservations: 8, revenue: 240000 },
-          { date: "Jeu", reservations: 18, revenue: 540000 },
-          { date: "Ven", reservations: 22, revenue: 660000 },
-          { date: "Sam", reservations: 28, revenue: 840000 },
-          { date: "Dim", reservations: 19, revenue: 570000 },
-        ]
-
-        setTrends(mockTrends)
+        if (response.ok) {
+          const result = await response.json()
+          if (result.success) {
+            setStats(result.stats.reservationStats)
+            setTrends(result.stats.weeklyTrends || [])
+          }
+        }
       } catch (error) {
         console.error("Error fetching reservation data:", error)
       } finally {
@@ -112,9 +95,11 @@ export default function ReservationSummary() {
             <Calendar className="h-4 w-4 text-gray-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-gray-900">{stats.total}</div>
+            <div className="text-2xl font-bold text-gray-900">
+              {(stats.pending + stats.confirmed + stats.paid + stats.completed + stats.cancelled)}
+            </div>
             <div className="flex items-center text-sm text-green-600">
-              <TrendingUp className="h-4 w-4 mr-1" />+{stats.weeklyTrend}% cette semaine
+              <TrendingUp className="h-4 w-4 mr-1" />{stats.confirmed + stats.paid} confirmées
             </div>
           </CardContent>
         </Card>
@@ -136,7 +121,7 @@ export default function ReservationSummary() {
             <Users className="h-4 w-4 text-gray-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-gray-900">{stats.upcoming}</div>
+            <div className="text-2xl font-bold text-gray-900">{stats.confirmed + stats.paid}</div>
             <div className="text-sm text-gray-600">prochaines réservations</div>
           </CardContent>
         </Card>
