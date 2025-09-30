@@ -7,8 +7,11 @@ import { JSX } from "react"
 
 async function getTerrainById(id: string) {
   try {
+     const baseUrl =
+    process.env.NEXT_PUBLIC_API_URL ??
+    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000");
     const res = await fetch(
-      `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000"}/api/terrains/${id}`,
+      `${baseUrl}/api/terrains/${id}`,
       {
         cache: "no-store",
       }
