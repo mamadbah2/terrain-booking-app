@@ -16,8 +16,8 @@ export default function Header() {
   ]
 
   const staffNavigationItems = [
-    { name: "Gestion des Terrains", href: "/gestion", roles: ["Gerant"] },
-    { name: "Tableau de Bord", href: "/dashboard", roles: ["Proprio"] },
+    { name: "Gestion des Terrains", href: "/gestion", roles: ["gerant"] },
+    { name: "Tableau de Bord", href: "/dashboard", roles: ["proprio"] },
   ]
 
   const visibleStaffItems = staffNavigationItems.filter((item) => user && item.roles.includes(user.role))
