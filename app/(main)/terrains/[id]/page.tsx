@@ -1,45 +1,87 @@
 "use client"
 
+import { useEffect, useState } from "react"
 import { notFound } from "next/navigation"
 import Image from "next/image"
 import { Badge } from "@/components/ui/badge"
 import { MapPin, Users, Wifi, Car, Shield } from "lucide-react"
 import BookingSection from "@/components/terrain/BookingSection"
 import { JSX } from "react"
-
-async function getTerrainById(id: string) {
-  console.log("Fetching terrain with ID:", id);
-  try {
-    const res = await fetch(
-      `/api/terrains/${id}`,
-      {
-        cache: "no-store",
-        method: "GET",
-        credentials: "include",
-      }
-    )
-
-    console.log("Fetch terrain response:", res)
-
-    if (!res.ok) {
-      if (res.status === 404) return null
-      throw new Error(`Erreur lors de la récupération du terrain: ${res.statusText}`)
-    }
-
-    return res.json()
-  } catch (error) {
-    console.error("Erreur lors de la récupération du terrain:", error)
-    return null
-  }
-}
+import { Terrain } from "@/models/terrain"
 
 interface PageProps {
   params: { id: string }
 }
 
-export default async function TerrainDetailsPage({ params }: PageProps) {
-  const { id } = await params
-  const terrain = await getTerrainById(id)
+export default function TerrainDetailsPage({ params }: PageProps) {
+  const [terrain, setTerrain] = useState<Terrain | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(false)
+
+  useEffect(() => {
+    async function fetchTerrain() {
+      try {
+        // Attendre que params soit résolu
+        const resolvedParams = await params
+        const { id } = resolvedParams
+        
+        console.log("Fetching terrain with ID:", id)
+        
+        const res = await fetch(
+          `/api/terrains/${id}`,
+          {
+            cache: "no-store",
+            method: "GET",
+            credentials: "include",
+          }
+        )
+
+        console.log("Fetch terrain response:", res)
+
+        if (!res.ok) {
+          if (res.status === 404) {
+            setError(true)
+            return
+          }
+          throw new Error(`Erreur lors de la récupération du terrain: ${res.statusText}`)
+        }
+
+        const terrainData = await res.json()
+        setTerrain(terrainData)
+      } catch (error) {
+        console.error("Erreur lors de la récupération du terrain:", error)
+        setError(true)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchTerrain()
+  }, [params])
+
+  if (loading) {
+    return (
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="animate-pulse">
+          <div className="h-8 bg-gray-200 rounded w-1/3 mb-4"></div>
+          <div className="h-4 bg-gray-200 rounded w-1/4 mb-8"></div>
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <div className="lg:col-span-2">
+              <div className="h-64 md:h-80 bg-gray-200 rounded-lg mb-8"></div>
+              <div className="h-20 bg-gray-200 rounded mb-8"></div>
+            </div>
+            <div className="lg:col-span-1">
+              <div className="h-96 bg-gray-200 rounded"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  if (error || !terrain) {
+    notFound()
+  }
 
   if (!terrain) {
     notFound()
@@ -70,7 +112,7 @@ export default async function TerrainDetailsPage({ params }: PageProps) {
   // Adapter le format du terrain pour BookingSection
   const fieldForBooking = {
     ...terrain,
-    id: terrain._id,
+    id: terrain._id?.toString() || "",
     price: terrain.pricePerHour,
     amenities: amenitiesWithIcons,
   }
