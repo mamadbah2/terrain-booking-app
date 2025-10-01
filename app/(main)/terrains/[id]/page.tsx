@@ -7,15 +7,16 @@ import { JSX } from "react"
 
 async function getTerrainById(id: string) {
   try {
-     const baseUrl =
-    process.env.NEXT_PUBLIC_API_URL ??
-    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000");
     const res = await fetch(
-      `${baseUrl}/api/terrains/${id}`,
+      `/api/terrains/${id}`,
       {
         cache: "no-store",
+        method: "GET",
+        credentials: "include",
       }
     )
+
+    console.log("Fetch terrain response:", res)
 
     if (!res.ok) {
       if (res.status === 404) return null
