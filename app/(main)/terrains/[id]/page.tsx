@@ -1,3 +1,5 @@
+"use client"
+
 import { notFound } from "next/navigation"
 import Image from "next/image"
 import { Badge } from "@/components/ui/badge"
@@ -6,6 +8,7 @@ import BookingSection from "@/components/terrain/BookingSection"
 import { JSX } from "react"
 
 async function getTerrainById(id: string) {
+  console.log("Fetching terrain with ID:", id);
   try {
     const res = await fetch(
       `/api/terrains/${id}`,

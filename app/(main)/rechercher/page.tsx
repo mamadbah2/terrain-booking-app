@@ -1,3 +1,5 @@
+"use client"
+
 import SearchFilters from "@/components/search/SearchFilters"
 import FieldGrid from "@/components/search/FieldGrid"
 import { Suspense } from "react"
