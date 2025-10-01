@@ -42,6 +42,8 @@ export async function GET(request: NextRequest) {
     const userTerrains = await db.collection("terrains").find(terrainFilter).toArray()
     const terrainIds = userTerrains.map(t => t._id)
 
+    // console.log("User terrains:", terrainIds)
+
     // 2. Calculer les revenus du mois actuel
     const currentMonthReservations = await db.collection("reservations").find({
       fieldId: { $in: terrainIds },
@@ -51,6 +53,8 @@ export async function GET(request: NextRequest) {
       },
       status: { $in: ["confirmed", "paid", "completed"] }
     }).toArray()
+    
+    console.log("Current month reservations:", currentMonthReservations)
 
     const totalRevenue = currentMonthReservations.reduce((sum, res) => sum + res.totalPrice, 0)
 

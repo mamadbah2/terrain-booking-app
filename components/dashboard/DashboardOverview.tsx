@@ -50,6 +50,8 @@ export default function DashboardOverview() {
         }
 
         const data = await response.json()
+
+        console.log("Dashboard stats fetched:", data)
         
         if (data.success) {
           setStats(data.stats)
